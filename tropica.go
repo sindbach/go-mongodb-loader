@@ -5,9 +5,9 @@ import (
     "encoding/json"
     "gopkg.in/mgo.v2"
     "os"
-    //"gopkg.in/mgo.v2/bson"
     "bufio"
     "sync"
+    "flag"
 )
 
 
@@ -25,7 +25,7 @@ type Taxi struct {
     Pickup_centroid_longitude string `json:pickup_centroid_longitude`
     Pickup_community_area string `json:pickup_community_area`
     Taxi_id string `json:taxi_id`
-    Tips string `json:tips`
+    Tips float32 `json:tips`
     Tolls string `json:tolls`
     Trip_end_timestamp string `json:trip_end_timestamp`
     Trip_id string `json:trip_id`
@@ -63,7 +63,7 @@ func worker(chLines <-chan string, wg *sync.WaitGroup, chResults chan<-int, mcol
 
         counter +=1
         if counter > 999 {
-            fmt.Print(".")
+            print(".")
             bulk := mcoll.Bulk()
             bulk.Insert(taxiBulk...)
             bulk.Run()
@@ -72,7 +72,7 @@ func worker(chLines <-chan string, wg *sync.WaitGroup, chResults chan<-int, mcol
         }
     }
     if counter > 0 {
-        fmt.Println("last round", counter)
+        print("last")
         bulk := mcoll.Bulk()
         bulk.Insert(taxiBulk...)
         bulk.Run()
@@ -80,9 +80,23 @@ func worker(chLines <-chan string, wg *sync.WaitGroup, chResults chan<-int, mcol
     chResults<-1
 }
 
+
+
 func main() {
 
-    f, err := os.Open("./taxidata.json")
+    argFilePtr := flag.String("input", "", "File JSON input array")
+    argNumWorkerPtr := flag.Int("numworker", 4, "Number of workers")
+    argMongoPtr := flag.String("mongo", "mongodb://localhost:27017", "MongoDB URI to connect to")
+    argDatabasePtr := flag.String("db", "taxidata", "MongoDB database")
+    argCollectionPtr := flag.String("coll", "taxidata", "MongoDB collection")
+    flag.Parse()
+
+    if *argFilePtr == "" {
+        flag.Usage()
+        os.Exit(1)
+    }
+
+    f, err := os.Open(*argFilePtr)
     if err != nil {
         panic(err)
     }
@@ -93,7 +107,7 @@ func main() {
 
     wg:= new(sync.WaitGroup)
 
-    session, err := mgo.Dial("mongodb://localhost:27017")
+    session, err := mgo.Dial(*argMongoPtr)
     session.EnsureSafe(&mgo.Safe{W: 0})
 
     if err != nil {
@@ -101,9 +115,9 @@ func main() {
     }
     defer session.Close()
 
-    mcoll := session.DB("taxidata").C("taxidata")
+    mcoll := session.DB(*argDatabasePtr).C(*argCollectionPtr)
     
-    for w:=1; w<=8; w++ {
+    for w:=1; w<=*argNumWorkerPtr; w++ {
         wg.Add(1)
         go worker(chLines, wg, chResults, mcoll)
     }
