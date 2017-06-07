@@ -10,7 +10,8 @@ import (
 )
 
 type Classifier struct {
-	Fields bson.M `bson:",inline"`
+	Id     bson.ObjectId `json:"id" bson:"_id"`
+	Fields bson.M        `bson:",inline"`
 }
 
 func worker(chLines <-chan Classifier, wg *sync.WaitGroup, sessionDst *mgo.Session, database string, collection string) {
@@ -22,10 +23,11 @@ func worker(chLines <-chan Classifier, wg *sync.WaitGroup, sessionDst *mgo.Sessi
 	collDst := sessionCopy.DB(database).C(collection)
 
 	for line := range chLines {
-		fmt.Print(".")
+		// Assign a new object id
+		line.Id = bson.NewObjectId()
 		dbulk = append(dbulk, line)
 		counter++
-		if counter > 999 {
+		if counter > 99 {
 			bulk := collDst.Bulk()
 			bulk.Insert(dbulk...)
 			_, err := bulk.Run()
@@ -50,7 +52,7 @@ func main() {
 
 	argMongoSourcePtr := flag.String("source", "mongodb://localhost:27017", "Source MongoDB URI")
 	argMongoDestPtr := flag.String("dest", "mongodb://localhost:27018", "Destination Mongo URI")
-	argNumWorkerPtr := flag.Int("numworker", 2, "Number of workers")
+	argNumWorkerPtr := flag.Int("numworker", 4, "Number of workers")
 	argDatabasePtr := flag.String("db", "test", "MongoDB database")
 	argCollectionPtr := flag.String("coll", "test", "MongoDB collection")
 	flag.Parse()
@@ -78,7 +80,7 @@ func main() {
 	}
 
 	go func() {
-		cursor := collSrc.Find(nil).Sort("_id").Limit(1000)
+		cursor := collSrc.Find(nil).Sort("_id")
 		var doc Classifier
 		docs := cursor.Iter()
 		for docs.Next(&doc) {
